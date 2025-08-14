@@ -1,0 +1,4 @@
+data/
+mlruns/
+.vscode/
+.pytest_cache/
