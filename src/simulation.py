@@ -1,15 +1,16 @@
 from dataclasses import dataclass
 from typing import Any, List
 import pandas as pd
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 
 # TODO:
-# = Make retraining frequency an option
+# - Make retraining frequency an option
 # - add model interface - when available
+# - Make simulator a class with an interface, getting a metrics factory
 
 
 @dataclass
-class SimulationResults:
+class SimulationResult:
     df_predictions: List[pd.DataFrame]
     df_actuals: List[pd.DataFrame]
     df_metrics: List[pd.DataFrame]
@@ -21,7 +22,7 @@ def walk_forward_simulation(
     train_size_months: int,
     test_size_months: int,
     model: Any,
-) -> SimulationResults:
+) -> SimulationResult:
     """
     Perform walk-forward validation on time series data with lagged and future features.
     Train size and test size are specified in months, and the sliding windows move by 1 month.
@@ -80,8 +81,8 @@ def walk_forward_simulation(
         )
 
         # Compute metrics
-        mse = mean_squared_error(df_target_test, y_pred)
-        metrics = pd.DataFrame({"mse": [mse]}, index=[current_test_start])
+        mae = mean_absolute_error(df_target_test, y_pred)
+        metrics = pd.DataFrame({"mae": [mae]}, index=[current_test_start])
 
         # Append results
         df_predictions.append(y_pred)
@@ -91,12 +92,12 @@ def walk_forward_simulation(
         # Print fold details
         print(
             f"Train: {current_train_start.date()} to {current_train_end.date()} | "
-            f"Test: {current_test_start.date()} to {current_test_end.date()} - MSE: {mse:.4f}"
+            f"Test: {current_test_start.date()} to {current_test_end.date()} - MAE: {mae:.4f}"
         )
 
         # Move the train window 1 month forward
         current_train_start += pd.DateOffset(months=1)
 
-    return SimulationResults(
+    return SimulationResult(
         df_predictions=df_predictions, df_actuals=df_actuals, df_metrics=df_metrics
     )
