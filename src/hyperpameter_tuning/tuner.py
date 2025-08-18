@@ -6,9 +6,14 @@ from sklearn.base import BaseEstimator
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge
 
+from src.simulation import walk_forward_simulation
+
 # TODO:
-# - check TimeSeriesSplit
+# - have simulation interface and inject it to the constructor
 # - do I need validation data as well?
+
+TEST_SIZE_IN_MONTHS = 1
+TRAIN_SIZE_IN_MONTHS = 1
 
 REGISTRY = {
     "ridge": lambda trial: Ridge(
@@ -75,5 +80,15 @@ class OptunaModelTuner:
         model_name: str,
     ) -> float:
         model = make_model(trial=trial, name=model_name)
-        model.fit(df_features.values, df_target.values)
-        # TODO: build train/test case - check how to validate first
+
+        simulation_result = walk_forward_simulation(
+            df_features=df_features,
+            df_target=df_target,
+            model=model,
+            test_size_months=TEST_SIZE_IN_MONTHS,
+            train_size_months=TRAIN_SIZE_IN_MONTHS,
+        )
+
+        df_metrics_aggregated = pd.concat(simulation_result.df_metrics)
+
+        return float(df_metrics_aggregated.mean())
