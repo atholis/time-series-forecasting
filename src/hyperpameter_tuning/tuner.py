@@ -6,10 +6,11 @@ from sklearn.base import BaseEstimator
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge
 
-from src.simulation import walk_forward_simulation
+from src.metrics import MLMetricName
+from src.models.base import TrainingDataset
+from src.simulation import BaseSimulator
 
 # TODO:
-# - have simulation interface and inject it to the constructor
 # - do I need validation data as well?
 
 TEST_SIZE_IN_MONTHS = 1
@@ -39,6 +40,7 @@ def make_model(trial: optuna.Trial, name: str) -> BaseEstimator:
     return model
 
 
+# TODO: Do I need every tuner instance to be linked only with one model?
 class OptunaModelTuner:
 
     def __init__(
@@ -46,6 +48,9 @@ class OptunaModelTuner:
         direction: str,
         pruner: optuna.pruners.BasePruner,
         study_name: str,
+        metric_name: MLMetricName,
+        model_name: str,
+        simulator: BaseSimulator,
         storage: Optional[str] = None,
     ):
         self._study = optuna.create_study(
@@ -55,40 +60,37 @@ class OptunaModelTuner:
             storage=storage,
             load_if_exists=bool(storage),
         )
+        self._metric_name = metric_name
+        self._model_name = model_name
+        self._simulator = simulator
 
     def tune(
         self,
-        df_features: pd.DataFrame,
-        df_target: pd.DataFrame,
+        training_set: TrainingDataset,
         n_trials: int,
         timeout: Optional[int] = None,
         show_progress_bar: bool = True,
     ) -> optuna.Study:
         self._study.optimize(
-            lambda trial: self._objective(trial, df_features, df_target),
+            lambda trial: self._objective(
+                trial=trial,
+                training_set=training_set,
+                model_name=self._model_name,
+                metric_name=self._metric_name,
+            ),
             n_trials=n_trials,
             timeout=timeout,
             show_progress_bar=show_progress_bar,
         )
         return self._study
 
-    @staticmethod
     def _objective(
+        self,
         trial: optuna.Trial,
-        df_features: pd.DataFrame,
-        df_target: pd.DataFrame,
-        model_name: str,
+        training_set: TrainingDataset,
     ) -> float:
-        model = make_model(trial=trial, name=model_name)
-
-        simulation_result = walk_forward_simulation(
-            df_features=df_features,
-            df_target=df_target,
-            model=model,
-            test_size_months=TEST_SIZE_IN_MONTHS,
-            train_size_months=TRAIN_SIZE_IN_MONTHS,
-        )
-
+        model = make_model(trial=trial, name=self._model_name)
+        simulation_result = self._simulator.simulate(dataset=training_set, model=model)
         df_metrics_aggregated = pd.concat(simulation_result.df_metrics)
 
-        return float(df_metrics_aggregated.mean())
+        return float(df_metrics_aggregated[self._metric_name].mean())
